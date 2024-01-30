@@ -1,0 +1,104 @@
+---
+- name: Research cloud run external Docker Compose plugin
+  hosts: all
+  gather_facts: true
+
+  tasks:
+  
+  # These prerequisites only target Linux Ubuntu
+  - name: Install required packages on Ubuntu and make sure Docker is installed
+    when: ansible_distribution == 'Ubuntu'
+    block:
+      - name: Install the packages
+        when: ansible_distribution_major_version == "18"
+        package:
+          name:
+            - python
+            - python-setuptools
+            - python-pip
+            - python3
+            - python3-setuptools
+            - python3-pip
+            - docker.io
+            - curl
+          state: present
+
+      - name: Install the packages
+        when: ansible_distribution_major_version >= "20"
+        package:
+          name:
+            - python3
+            - python3-setuptools
+            - python3-pip
+            - docker.io
+            - curl
+            - ubuntu-drivers-common
+          state: present
+
+  # We verify if this is a GPU-workspace if /usr/bin/nvidia-smi is available
+  - name: Check if GPU available
+    stat:
+      path: /usr/bin/nvidia-smi
+    register: nvidia_smi_bin
+
+  - name: Run nvidia-smi
+    command: /usr/bin/nvidia-smi
+    register: nvidia_smi_output
+    failed_when: false
+
+  - name: Debug nvida-smi
+    debug:
+      var: nvidia_smi_output
+
+  - name: Set up Docker NVIDIA driver
+    when: nvidia_smi_bin.stat.exists
+    block:
+      # According to: https://nvidia.github.io/nvidia-container-runtime/
+      - name: Install nvidia-container-runtime # noqa command-instead-of-module
+        shell: |
+          curl -s -L https://nvidia.github.io/nvidia-container-runtime/gpgkey | sudo apt-key add -
+          distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
+          curl -s -L https://nvidia.github.io/nvidia-container-runtime/$distribution/nvidia-container-runtime.list | sudo tee /etc/apt/sources.list.d/nvidia-container-runtime.list
+      - name: Install runtime
+        apt:
+          name: nvidia-container-runtime
+          update_cache: yes
+      - name: Restart Docker daemon
+        ansible.builtin.systemd:
+          state: restarted
+          daemon_reload: yes
+          name: docker
+
+  - name: Update pip3 version # noqa no-changed-when
+    shell: pip3 install --upgrade pip # noqa command-instead-of-shell
+
+  # - name: Install Docker Python SDK
+  #   pip:
+  #     name: docker
+  #     executable: pip3
+
+  # - name: Install docker-compose (1/2)
+  #   get_url:
+  #     url : https://github.com/docker/compose/releases/download/1.29.2/docker-compose-Linux-x86_64
+  #     dest: /usr/local/bin/docker-compose
+  #     mode: 'u+x,g+x'
+
+  # - name: Install docker-compose (2/2)
+  #   pip:
+  #     name: docker-compose
+  #     executable: pip3
+
+  - name: Install Docker SDK for Python
+    ansible.builtin.pip:
+      name: 
+        - "docker==6.1.3"
+        - "docker-compose"
+
+  - name: Run a container to test GPU availability
+    command: docker run -it --rm --gpus all ubuntu nvidia-smi
+    register: docker_gpu
+    failed_when: false
+
+  - name: Debug docker gpu
+    debug:
+      var: docker_gpu
