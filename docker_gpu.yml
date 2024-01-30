@@ -1,6 +1,6 @@
 ---
 - name: Research cloud run external Docker Compose plugin
-  hosts: all
+  hosts: localhost
   gather_facts: true
 
   tasks:
