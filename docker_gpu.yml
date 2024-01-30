@@ -35,6 +35,14 @@
             - ubuntu-drivers-common
           state: present
 
+  - name: Autoinstall drivers
+    command: ubuntu-drivers autoinstall
+    register: ubuntu_drivers
+
+  - name: Debug autoinstall
+    debug:
+      var: ubuntu_drivers
+
   # We verify if this is a GPU-workspace if /usr/bin/nvidia-smi is available
   - name: Check if GPU available
     stat:
